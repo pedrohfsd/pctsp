@@ -189,8 +189,3 @@ function gvns(instance::Instance, timeout, k_max, l_max)
 	end
 	return best
 end
-
-#test = Instance([[1 2 3], [2 3 4], [3 4 5]], [5,4,3], [2,4,5], 6, 3, 11)
-prizes, penalties, costs = read_file("../res/instances/problem_20_100_100_1000.pctsp")
-test = Instance(reshape(costs, 20, 20), prizes, penalties, 100, 20, sum(penalties))
-print(gvns(test, 1, 2, 1))
