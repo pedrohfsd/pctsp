@@ -5,7 +5,8 @@ using StatsBase
 function keep_best(counter, candidate, current, printInfo)
 	if objective(candidate) < objective(current)
 		if printInfo
-			println("Best solution changed to $candidate with objective: $(objective(candidate))")
+			#println("Best solution changed to $candidate with objective: $(objective(candidate))")
+			println("Best solution changed to objective: $(objective(candidate)) with tour length: $(length(candidate.tour)) $candidate")
 		end
 		return (1, candidate)
 	end
@@ -14,9 +15,29 @@ end
 
 function shake_k(solution, k, instance)
 	if k==1
-		return shake1(solution, instance)
+		return shake_insert_node(solution, instance)
 	elseif k==2
-		return shake2(solution, instance)
+		return shake_remove_node(solution, instance)
+	elseif k==3
+		return shake_insert_nodes(solution, instance, round(instance.cities_count*0.2))
+	elseif k==4
+		return shake_remove_nodes(solution, instance, round(instance.cities_count*0.2))
+	elseif k==5
+		return shake_insert_nodes(solution, instance, round(instance.cities_count*0.4))
+	elseif k==6
+		return shake_remove_nodes(solution, instance, round(instance.cities_count*0.4))
+#	elseif k==7
+#		return shake_insert_nodes(solution, instance, round(instance.cities_count*0.6))
+#	elseif k==8
+#		return shake_remove_nodes(solution, instance, round(instance.cities_count*0.6))
+#	elseif k==9
+#		return shake_insert_nodes(solution, instance, round(instance.cities_count*0.8))
+#	elseif k==10
+#		return shake_remove_nodes(solution, instance, round(instance.cities_count*0.8))
+#	elseif k==11
+#		return shake_remove_nodes(solution, instance, round(instance.cities_count*0.8))
+	elseif k==7
+		return shake_switch_nodes(solution, instance)
 	end
 	error("K-Neighborhood k=$k wasn't implemented yet") 
 end
@@ -53,7 +74,30 @@ function find_feasible(instance)
 	return solution
 end
 
-function shake1(solution, instance)
+function shake_switch_nodes(solution, instance)
+	used = Set(solution.tour)
+	all = Set(1:instance.cities_count)
+	candidates = collect(symdiff(used, all))
+	best = solution
+	temp_tour = copy(solution.tour)
+	for i in 1:length(temp_tour)
+		for candidate in candidates
+			temp_tour[i], old = candidate, temp_tour[i] # do
+			total_prize, total_cost, total_penalty = calculate_tour(temp_tour, instance)
+			best_total_prize, best_total_cost, best_total_penalty = calculate_tour(best.tour, instance)
+			if total_cost < best_total_cost
+				aux = Solution(total_prize, total_cost, total_penalty, copy(temp_tour))
+				if is_feasible(aux, instance)
+					best = aux
+				end
+			end
+			temp_tour[i] = old
+		end
+	end
+	return best
+end
+
+function shake_insert_node(solution, instance)
 	if length(solution.tour) == instance.cities_count
 		return solution
 	end
@@ -66,13 +110,29 @@ function shake1(solution, instance)
 	return shaked
 end
 
-function shake2(solution, instance)
+function shake_remove_node(solution, instance)
 	if length(solution.tour) == 2
 		return solution
 	end
 	old_index = rand(1:length(solution.tour))
 	shaked = Solution(solution.total_prize, solution.total_cost, solution.total_penalty, copy(solution.tour))
 	remove_city(instance, shaked, old_index)
+	return shaked
+end
+
+function shake_insert_nodes(solution, instance, quantity)
+	shaked = solution
+	for i in 1:quantity
+		shaked = shake_insert_node(shaked, instance)
+	end
+	return shaked
+end
+
+function shake_remove_nodes(solution, instance, quantity)
+	shaked = solution
+	for i in 1:quantity
+		shaked = shake_remove_node(shaked, instance)
+	end
 	return shaked
 end
 
@@ -87,6 +147,10 @@ end
 
 function remove_city(instance, solution, index)
 	solution.total_prize -= instance.prizes[solution.tour[index]]
+	if !is_feasible(solution, instance)
+		solution.total_prize += instance.prizes[solution.tour[index]]
+		return
+	end
 	solution.total_penalty += instance.penalties[solution.tour[index]]
 	prev = index-1
 	next = index+1
@@ -108,7 +172,8 @@ function local_search1(solution, instance)
 		for j in i:length(solution.tour)
 			temp_tour[i], temp_tour[j] = temp_tour[j], temp_tour[i] # do
 			total_prize, total_cost, total_penalty = calculate_tour(temp_tour, instance)
-			if objective(total_prize, total_cost, total_penalty) < objective(best)
+			best_total_prize, best_total_cost, best_total_penalty = calculate_tour(best.tour, instance)
+			if total_cost < best_total_cost
 				best = Solution(total_prize, total_cost, total_penalty, copy(temp_tour))
 			end
 			temp_tour[i], temp_tour[j] = temp_tour[j], temp_tour[i] # undo
@@ -129,8 +194,8 @@ function objective(total_prize, total_cost, total_penalty)
 	return total_penalty + total_cost
 end
 
-function objective(solution)
-	return solution.total_penalty + solution.total_cost
+function is_feasible(solution, instance)
+	return solution.total_prize >= instance.minimum_prize
 end
 
 function calculate_tour(tour, instance)
@@ -160,7 +225,7 @@ type Instance
 	costs::Array{Int64, 2}
 	prizes::Array{Int64}
 	penalties::Array{Int64}
-	minimum_prize::Int64
+	minimum_prize::Float64
 	cities_count::Int64
 	total_penalties::Int64
 end
@@ -170,7 +235,7 @@ function gvns(instance::Instance, timeout, k_max, l_max)
 	time_limit = Dates.value(now()) + 1000*60*timeout
 	count
 	while Dates.value(now()) < time_limit
-		#println("Restarting $best")
+		println("Restarting")
 		current = find_feasible(instance)
 		k = 1
 		while k <= k_max
