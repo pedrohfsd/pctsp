@@ -1,0 +1,45 @@
+Dada a formulação do problema identifiquei dois objetivos que poderiam ser divididos:
+	encontrar um subconjunto viável com baixa penalidade e custo
+	econtrar um tour ótimo dentro do subconjunto
+
+Baseado no que foi proposto para o curso procurei me basear em SA, ILS e VNS
+Encontrei um paper do Gerad exemplicando alternativas de VNS:
+	escolhi o GVNS
+A idéia de ter algo próximo a 2 VND era exatamente o que procurava
+
+Inicio com um feasible aleatório de forma construtiva
+Começei com 2 vizinhas no primeiro nível e 1 no segundo:
+	1o nídel: inserir um nó e remover um nó 
+	2o nivel: 2-opt
+Os resultados foram ruins, fiquei a 150% do ótimo
+
+Reparei que o algoritmo fazia reset muito rápido portanto adicionei novas vizinhanças no 1o nível:
+	inserir 30% de nós a mais (sobre o total de cidades existentes)
+	remover 30% de nós a mais (sobre o total de cidades existentes)
+Os resultados foram ruins, fiquei a 140% do ótimo
+
+Reparei que o algoritmo fazia reset muito rápido portanto adicionei novas vizinhanças no 1o nível:
+	inserir 60% de nós a mais (sobre o total de cidades existentes)
+	remover 60% de nós a mais (sobre o total de cidades existentes)
+Os resultados foram ruins, fiquei a 130% do ótimo
+
+Reparei que o algoritmo fazia reset muito rápido portanto em cada vizinhança:
+	faz local ótimo com swap entre cidades que estão no tour e cidades que não estão
+Os resultados foram ruins, fiquei a 130% do ótimo
+
+Adicionei novas vizinhanças no 2o nível:
+	swap
+Os resultados não mudaram, continuei a 100% do ótimo
+
+Fiquei inconformado com os resultados, minha suspeita era de que o TSP não estava sendo bem resolvido, resolvi investigar com calma
+
+Encontrei um bug no 2-opt:
+	fiquei a 40% do ótimo
+O bug acontecia porque eu não zerava o loop ao encontrar o melhor candidato, por isso se comportava com um swap
+
+Estou lutando bravamente contra a minha vontade de manter os caminhos conhecidos em hashmap para não testá-los novamente mas quero evitar o uso de backtracking
+
+Usei a mesma idéia de 2-opt no 1 nivel
+Não trouxe nenhuma mudança significativa
+
+executei o algoritmo 10 vezes para cada instância, fiquei com a média e com o menor encontrado

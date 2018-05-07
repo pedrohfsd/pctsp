@@ -2,11 +2,18 @@ include("./reader.jl")
 
 using StatsBase
 
+DEBUG = false
+
+function prin(message)
+	if DEBUG
+		println(message)
+	end
+end
+
 function keep_best(counter, candidate, current, printInfo)
 	if objective(candidate) < objective(current)
 		if printInfo
-			#println("Best solution changed to $candidate with objective: $(objective(candidate))")
-			println("Best solution changed to objective: $(objective(candidate)) with tour length: $(length(candidate.tour)) $candidate")
+			prin("Best solution changed to objective: $(objective(candidate)) with tour length: $(length(candidate.tour)) $candidate")
 		end
 		return (1, candidate)
 	end
@@ -15,17 +22,21 @@ end
 
 function shake_k(solution, k, instance)
 	if k==1
-		return shake_insert_node(solution, instance)
+		return shake_switch_nodes(solution, instance)
 	elseif k==2
-		return shake_remove_node(solution, instance)
+		return shake_switch_nodes(shake_swap_nodes(shake_insert_node(solution, instance), instance), instance)
 	elseif k==3
-		return shake_insert_nodes(solution, instance, round(instance.cities_count*0.2))
+		return shake_switch_nodes(shake_swap_nodes(shake_insert_node(solution, instance), instance), instance)
 	elseif k==4
-		return shake_remove_nodes(solution, instance, round(instance.cities_count*0.2))
+		return shake_switch_nodes(shake_swap_nodes(shake_remove_node(solution, instance), instance), instance)
 	elseif k==5
-		return shake_insert_nodes(solution, instance, round(instance.cities_count*0.4))
+		return shake_switch_nodes(shake_swap_nodes(shake_insert_nodes(solution, instance, round(instance.cities_count*0.2)), instance), instance)
 	elseif k==6
-		return shake_remove_nodes(solution, instance, round(instance.cities_count*0.4))
+		return shake_switch_nodes(shake_swap_nodes(shake_remove_nodes(solution, instance, round(instance.cities_count*0.2)), instance), instance)
+	elseif k==7
+		return shake_switch_nodes(shake_swap_nodes(shake_insert_nodes(solution, instance, round(instance.cities_count*0.4)), instance), instance)
+	elseif k==8
+		return shake_switch_nodes(shake_swap_nodes(shake_remove_nodes(solution, instance, round(instance.cities_count*0.4)), instance), instance)
 #	elseif k==7
 #		return shake_insert_nodes(solution, instance, round(instance.cities_count*0.6))
 #	elseif k==8
@@ -36,17 +47,17 @@ function shake_k(solution, k, instance)
 #		return shake_remove_nodes(solution, instance, round(instance.cities_count*0.8))
 #	elseif k==11
 #		return shake_remove_nodes(solution, instance, round(instance.cities_count*0.8))
-	elseif k==7
-		return shake_switch_nodes(solution, instance)
+#	elseif k==7
+#		return shake_switch_nodes(solution, instance)
 	end
 	error("K-Neighborhood k=$k wasn't implemented yet") 
 end
 
 function local_search_l(solution, l, instance)
 	if l==1
-		return local_search1(solution, instance)
+		return swap(solution, instance)
 	elseif l==2
-		return local_search2(solution, instance)
+		return two_opt(solution, instance)
 	end
 	error("L-Neighborhood l=$l wasn't implemented yet") 
 end
@@ -85,7 +96,7 @@ function shake_switch_nodes(solution, instance)
 			temp_tour[i], old = candidate, temp_tour[i] # do
 			total_prize, total_cost, total_penalty = calculate_tour(temp_tour, instance)
 			best_total_prize, best_total_cost, best_total_penalty = calculate_tour(best.tour, instance)
-			if total_cost < best_total_cost
+			if objective(total_prize, total_cost, total_penalty) < objective(best_total_prize, best_total_cost, best_total_penalty)
 				aux = Solution(total_prize, total_cost, total_penalty, copy(temp_tour))
 				if is_feasible(aux, instance)
 					best = aux
@@ -93,6 +104,33 @@ function shake_switch_nodes(solution, instance)
 			end
 			temp_tour[i] = old
 		end
+	end
+	return best
+end
+
+function shake_swap_nodes(solution, instance)
+	best = solution
+	used = Set(best.tour)
+	all = Set(1:instance.cities_count)
+	candidates = collect(symdiff(used, all))
+	i = 1
+	while i < length(best.tour)
+		for candidate in candidates
+			best_total_prize, best_total_cost, best_total_penalty = calculate_tour(best.tour, instance)
+			best.tour[i], old = candidate, best.tour[i] # do
+			total_prize, total_cost, total_penalty = calculate_tour(best.tour, instance)
+			if objective(total_prize, total_cost, total_penalty) < objective(best_total_prize, best_total_cost, best_total_penalty)
+				if is_feasible(best, instance)
+					i = 0
+					used = Set(best.tour)
+					all = Set(1:instance.cities_count)
+					candidates = collect(symdiff(used, all))
+					break
+				end
+			end
+			best.tour[i] = old
+		end
+		i += 1
 	end
 	return best
 end
@@ -165,18 +203,38 @@ function remove_city(instance, solution, index)
 	splice!(solution.tour, index)
 end
 
-function local_search1(solution, instance)
+function two_opt(solution, instance)
 	best = solution
-	temp_tour = copy(solution.tour)
-	for i in 1:length(solution.tour)
-		for j in i:length(solution.tour)
-			temp_tour[i], temp_tour[j] = temp_tour[j], temp_tour[i] # do
-			total_prize, total_cost, total_penalty = calculate_tour(temp_tour, instance)
+	i = 1
+	while i < length(best.tour)
+		j = i+1
+		while j < length(best.tour)
 			best_total_prize, best_total_cost, best_total_penalty = calculate_tour(best.tour, instance)
+			new_tour = reverse(copy(best.tour), i, j)
+			total_prize, total_cost, total_penalty = calculate_tour(new_tour, instance)
 			if total_cost < best_total_cost
-				best = Solution(total_prize, total_cost, total_penalty, copy(temp_tour))
+				i=0
+				best = Solution(total_prize, total_cost, total_penalty, new_tour)
+				break
 			end
-			temp_tour[i], temp_tour[j] = temp_tour[j], temp_tour[i] # undo
+			j += 1
+		end
+		i += 1
+	end
+	return best
+end
+
+function swap(solution, instance)
+	best = solution
+	for i in 1:length(solution.tour)-1
+		for j in (i+1):length(solution.tour)
+			best_total_prize, best_total_cost, best_total_penalty = calculate_tour(best.tour, instance)
+			solution.tour[i], solution.tour[j] = solution.tour[j], solution.tour[i] # do
+			total_prize, total_cost, total_penalty = calculate_tour(solution.tour, instance)
+			if total_cost < best_total_cost
+				best = Solution(total_prize, total_cost, total_penalty, copy(solution.tour))
+			end
+			solution.tour[i], solution.tour[j] = solution.tour[j], solution.tour[i] # undo
 		end
 	end
 	return best
@@ -235,15 +293,15 @@ function gvns(instance::Instance, timeout, k_max, l_max)
 	time_limit = Dates.value(now()) + 1000*60*timeout
 	count
 	while Dates.value(now()) < time_limit
-		println("Restarting")
+		#prin("Restarting")
 		current = find_feasible(instance)
 		k = 1
 		while k <= k_max
-			#println("Starting iteration k")
+			#prin("Starting iteration k")
 			current_k = shake_k(current, k, instance)
-			#println(current_k)
+			#prin(current_k)
 			l = 1
-			#println("Starting iteration l")
+			#prin("Starting iteration l")
 			while l <= l_max
 				current_l = local_search_l(current_k, l, instance)
 				l, current_k = keep_best(l, current_l, current_k, false)
