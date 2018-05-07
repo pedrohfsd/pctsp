@@ -28,10 +28,8 @@ function main()
 		end
 		i += 1
 	end
-	for class in solutions
-		println(class)
+	for class in keys(solutions)
 		for solution in solutions[class]
-			println(solution)
 			println("$(solution[1]), $(solution[2]), $(solution[3])")
 		end
 	end
